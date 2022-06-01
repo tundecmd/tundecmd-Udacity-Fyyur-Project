@@ -5,13 +5,16 @@
 import json
 import dateutil.parser
 import babel
-from flask import Flask, render_template, request, Response, flash, redirect, url_for
+from flask import Flask, render_template, request, Response, flash, redirect, url_for, jsonify, abort
 from flask_moment import Moment
 from flask_sqlalchemy import SQLAlchemy
 import logging
 from logging import Formatter, FileHandler
 from flask_wtf import Form
 from forms import *
+from flask_migrate import Migrate
+import datetime
+import sys
 #----------------------------------------------------------------------------#
 # App Config.
 #----------------------------------------------------------------------------#
@@ -20,7 +23,7 @@ app = Flask(__name__)
 moment = Moment(app)
 app.config.from_object('config')
 db = SQLAlchemy(app)
-
+migrate = Migrate(app, db)
 # TODO: connect to a local postgresql database
 
 #----------------------------------------------------------------------------#
@@ -41,6 +44,13 @@ class Venue(db.Model):
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
+    website = db.Column(db.String(50), nullable=True)
+    seeking_talent = db.Column(db.String(), nullable=True)
+    seeking_description = db.Column(db.String(), nullable=True)
+    genres = db.Column(db.String(), nullable=False)
+    created_date = db.Column(db.DateTime(timezone=True), default=datetime.datetime.utcnow)
+    shows = db.relationship('Show', backref='Venue', lazy=True);
+
 class Artist(db.Model):
     __tablename__ = 'Artist'
 
@@ -55,7 +65,23 @@ class Artist(db.Model):
 
     # TODO: implement any missing fields, as a database migration using Flask-Migrate
 
+    website = db.Column(db.String(50), nullable=True)
+    seeking_venue = db.Column(db.String(), nullable=True)
+    seeking_description = db.Column(db.String(), nullable=True)
+    genres = db.Column(db.String(), nullable=False)
+    created_date = db.Column(db.DateTime(timezone=True), default=datetime.datetime.utcnow)
+    available = db.Column(db.String(), nullable=True)
+    shows = db.relationship('Show', backref='Artist', lazy=True);
+
 # TODO Implement Show and Artist models, and complete all model relationships and properties, as a database migration.
+
+class Show(db.Model):
+  __tablename__ = 'Show'
+
+  id = db.Column(db.Integer, primary_key=True)
+  venue_id = db.Column(db.Integer, db.ForeignKey('Venue.id'), nullable=False)
+  artist_id = db.Column(db.Integer, db.ForeignKey('Artist.id'), nullable=False)
+  start_time = db.Column(db.DateTime(timezone=True), default=datetime.datetime.utcnow)
 
 #----------------------------------------------------------------------------#
 # Filters.
@@ -221,6 +247,55 @@ def create_venue_form():
 def create_venue_submission():
   # TODO: insert form data as a new Venue record in the db, instead
   # TODO: modify data to be the data object returned from db insertion
+
+  error = False
+  body = {}
+
+  try:
+    name = request.get_json()['name']
+    city = request.get_json()['city']
+    state = request.get_json()['state']
+    address = request.get_json()['address']
+    phone = request.get_json()['phone']
+    genres = request.get_json()['genres']
+    website = request.get_json()['website']
+    facebook_link = request.get_json()['facebook_link']
+    image_link = request.get_json()['image_link']
+    seeking_talent = request.get_json()['seeking_talent']
+    seeking_description = request.get_json()['seeking_description']
+
+  
+    venue = Venue(
+      name = name,
+      city = city,
+      state = state,
+      address = address, 
+      phone = phone, 
+      genres = genres,
+      facebook_link = facebook_link, 
+      image_link = image_link, 
+      website = website, 
+      seeking_talent = seeking_talent,
+      seeking_description = seeking_description
+    )
+
+    print(venue)
+
+    db.session.add(venue)
+    db.session.commit()
+
+  except:
+    db.session.rollback()
+    error = True
+    # print(sys.exc.info())
+  finally:
+    db.session.close()
+  if error:
+    abort(400)
+  else:
+    return jsonify(body)
+
+
 
   # on successful db insert, flash success
   flash('Venue ' + request.form['name'] + ' was successfully listed!')
